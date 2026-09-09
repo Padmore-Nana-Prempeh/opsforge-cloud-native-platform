@@ -58,3 +58,29 @@ def get_order(order_id: int) -> dict | None:
         "status": row[2],
         "created_at": row[3].isoformat(),
     }
+
+
+def update_order_status(order_id: int, status: str) -> dict | None:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE orders
+                SET status = %s
+                WHERE id = %s
+                RETURNING id, item_id, status, created_at
+                """,
+                (status, order_id),
+            )
+
+            row = cur.fetchone()
+
+    if row is None:
+        return None
+
+    return {
+        "id": row[0],
+        "item_id": row[1],
+        "status": row[2],
+        "created_at": row[3].isoformat(),
+    }

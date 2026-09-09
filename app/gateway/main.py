@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import httpx
 from fastapi import FastAPI, HTTPException
 from app.common.db import create_order, get_order
+from app.common.queue import enqueue_order
 
 
 app = FastAPI(
@@ -85,7 +86,10 @@ def check_inventory(item_id: str):
         )
 
 
-@app.post("/orders/{item_id}")
+@app.post(
+    "/orders/{item_id}",
+    status_code=202,
+)
 def create_new_order(item_id: str):
     try:
         inventory_response = httpx.get(
@@ -115,9 +119,15 @@ def create_new_order(item_id: str):
 
     order = create_order(item_id)
 
+    enqueue_order(
+        order["id"],
+        order["item_id"],
+    )
+
     return {
         "order": order,
         "inventory": inventory_response.json(),
+        "background_job": "queued",
     }
 
 
