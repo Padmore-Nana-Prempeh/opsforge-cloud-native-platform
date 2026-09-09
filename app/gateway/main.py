@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 import httpx
 from fastapi import FastAPI, HTTPException
+from app.common.db import create_order, get_order
 
 
 app = FastAPI(
@@ -82,3 +83,52 @@ def check_inventory(item_id: str):
             status_code=503,
             detail="Inventory service unavailable",
         )
+
+
+@app.post("/orders/{item_id}")
+def create_new_order(item_id: str):
+    try:
+        inventory_response = httpx.get(
+            f"{INVENTORY_URL}/inventory/{item_id}",
+            timeout=1.0,
+        )
+
+        inventory_response.raise_for_status()
+
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail="Inventory service timed out",
+        )
+
+    except httpx.HTTPStatusError:
+        raise HTTPException(
+            status_code=502,
+            detail="Inventory service returned an error",
+        )
+
+    except httpx.RequestError:
+        raise HTTPException(
+            status_code=503,
+            detail="Inventory service unavailable",
+        )
+
+    order = create_order(item_id)
+
+    return {
+        "order": order,
+        "inventory": inventory_response.json(),
+    }
+
+
+@app.get("/orders/{order_id}")
+def read_order(order_id: int):
+    order = get_order(order_id)
+
+    if order is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Order not found",
+        )
+
+    return order
