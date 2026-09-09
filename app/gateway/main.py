@@ -2,12 +2,19 @@ import os
 import socket
 from datetime import datetime, timezone
 
-from fastapi import FastAPI
+import httpx
+from fastapi import FastAPI, HTTPException
 
 
 app = FastAPI(
     title="OpsForge Gateway API",
     version="0.1.0",
+)
+
+
+INVENTORY_URL = os.getenv(
+    "INVENTORY_URL",
+    "http://127.0.0.1:8001",
 )
 
 
@@ -19,10 +26,17 @@ def root():
     }
 
 
-@app.get("/health")
-def health():
+@app.get("/health/live")
+def live():
     return {
-        "status": "healthy",
+        "status": "alive",
+    }
+
+
+@app.get("/health/ready")
+def ready():
+    return {
+        "status": "ready",
     }
 
 
@@ -34,3 +48,37 @@ def info():
         "pid": os.getpid(),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@app.get("/check-inventory/{item_id}")
+def check_inventory(item_id: str):
+    try:
+        response = httpx.get(
+            f"{INVENTORY_URL}/inventory/{item_id}",
+            timeout=1.0,
+        )
+
+        response.raise_for_status()
+
+        return {
+            "gateway": "ok",
+            "inventory": response.json(),
+        }
+
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=504,
+            detail="Inventory service timed out",
+        )
+
+    except httpx.HTTPStatusError:
+        raise HTTPException(
+            status_code=502,
+            detail="Inventory service returned an error",
+        )
+
+    except httpx.RequestError:
+        raise HTTPException(
+            status_code=503,
+            detail="Inventory service unavailable",
+        )
