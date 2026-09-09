@@ -4,9 +4,22 @@ from datetime import datetime, timezone
 
 import httpx
 from fastapi import FastAPI, HTTPException
-from app.common.db import create_order, get_order
-from app.common.queue import enqueue_order
 
+from app.common.config import (
+    INVENTORY_TIMEOUT_SECONDS,
+    INVENTORY_URL,
+)
+
+from app.common.db import (
+    create_order,
+    database_is_ready,
+    get_order,
+)
+
+from app.common.queue import (
+    enqueue_order,
+    redis_is_ready,
+)
 
 app = FastAPI(
     title="OpsForge Gateway API",
@@ -18,6 +31,19 @@ INVENTORY_URL = os.getenv(
     "INVENTORY_URL",
     "http://127.0.0.1:8001",
 )
+
+
+def inventory_is_ready() -> bool:
+    try:
+        response = httpx.get(
+            f"{INVENTORY_URL}/health/ready",
+            timeout=INVENTORY_TIMEOUT_SECONDS,
+        )
+
+        return response.status_code == 200
+
+    except httpx.RequestError:
+        return False
 
 
 @app.get("/")
@@ -37,8 +63,26 @@ def live():
 
 @app.get("/health/ready")
 def ready():
+    dependencies = {
+        "database": database_is_ready(),
+        "redis": redis_is_ready(),
+        "inventory": inventory_is_ready(),
+    }
+
+    is_ready = all(dependencies.values())
+
+    if not is_ready:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "not_ready",
+                "dependencies": dependencies,
+            },
+        )
+
     return {
         "status": "ready",
+        "dependencies": dependencies,
     }
 
 

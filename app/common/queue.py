@@ -3,6 +3,8 @@ import os
 
 import redis
 
+from app.common.config import REDIS_URL
+
 
 REDIS_URL = os.getenv(
     "REDIS_URL",
@@ -19,6 +21,14 @@ def get_redis():
         socket_timeout=None,
         socket_connect_timeout=2,
     )
+
+def redis_is_ready() -> bool:
+    try:
+        client = get_redis()
+        return bool(client.ping())
+
+    except redis.RedisError:
+        return False
 
 
 def enqueue_order(order_id: int, item_id: str) -> None:

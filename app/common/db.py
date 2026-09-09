@@ -2,6 +2,8 @@ import os
 
 import psycopg
 
+from app.common.config import DATABASE_URL
+
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -11,6 +13,18 @@ DATABASE_URL = os.getenv(
 
 def get_connection():
     return psycopg.connect(DATABASE_URL)
+
+def database_is_ready() -> bool:
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+                cur.fetchone()
+
+        return True
+
+    except psycopg.Error:
+        return False
 
 
 def create_order(item_id: str) -> dict:
